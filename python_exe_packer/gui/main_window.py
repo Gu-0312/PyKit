@@ -1,7 +1,7 @@
 import os
 import threading
 import time
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QSystemTrayIcon
 from qfluentwidgets import (
@@ -113,7 +113,11 @@ class MainWindow(MSFluentWindow):
 
         self.pack_interface.start_pack_signal.connect(self._on_start_pack)
         self.pack_interface.stop_pack_signal.connect(self._on_stop_pack)
-        self.packer.finished_signal.connect(self._on_pack_finished)
+        def to_main(callback):
+            def wrapper(*args):
+                QTimer.singleShot(0, lambda: callback(*args))
+            return wrapper
+        self.packer.finished_signal.connect(to_main(self._on_pack_finished))
         self.pack_interface.clean_build_signal.connect(self._on_clean_build)
         self.build_cleaner.set_log_callback(
             lambda msg: self.pack_interface.log_widget.add_log(msg)

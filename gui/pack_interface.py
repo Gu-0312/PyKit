@@ -684,7 +684,7 @@ class PackInterface(QWidget):
 
     def _save_config(self):
         """保存当前配置"""
-        config = self._get_config()
+        config = self.get_config()
         self.config_manager.save_config(config)
 
     def _on_clean_build(self):

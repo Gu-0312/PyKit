@@ -471,9 +471,14 @@ class PackInterface(QWidget):
         self.preview_btn.setEnabled(enabled)
 
     def _connect_signals(self):
-        self.packer.log_signal.connect(self.log_widget.add_log)
-        self.packer.progress_signal.connect(self._on_progress)
-        self.packer.finished_signal.connect(self._on_pack_finished)
+        from PySide6.QtCore import QTimer
+        def to_main(callback):
+            def wrapper(*args):
+                QTimer.singleShot(0, lambda: callback(*args))
+            return wrapper
+        self.packer.log_signal.connect(to_main(self.log_widget.add_log))
+        self.packer.progress_signal.connect(to_main(self._on_progress))
+        self.packer.finished_signal.connect(to_main(self._on_pack_finished))
 
     def _on_progress(self, percent, message):
         self.progress_bar.setValue(percent)

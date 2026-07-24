@@ -21,6 +21,7 @@ from core.packer import Packer
 from utils.config_manager import ConfigManager
 from utils.env_checker import EnvChecker
 from utils.build_cleaner import BuildCleaner
+from utils.icon_cache_cleaner import IconCacheCleaner
 from utils.i18n import tr
 from app.application import get_lang_manager
 
@@ -202,6 +203,12 @@ class MainWindow(MSFluentWindow):
         name = config.get("name", "") or os.path.splitext(os.path.basename(config.get("source_file", "")))[0]
         if success:
             self.pack_interface.log_widget.add_log(f"[SUCCESS] {tr('pack_done')}")
+            # 清理Windows图标缓存，确保EXE图标正确显示
+            try:
+                IconCacheCleaner.clear_icon_cache()
+                self.pack_interface.log_widget.add_log("[INFO] 已刷新图标缓存")
+            except Exception:
+                pass
             if config.get("auto_open_output", True) and config.get("output_dir"):
                 try:
                     os.startfile(config["output_dir"])

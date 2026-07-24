@@ -10,13 +10,28 @@ from core.cache_cleaner import CacheCleaner
 from core.inno_setup import InnoSetup
 from core.upx_compressor import UPXCompressor
 from _version import get_version
-from PySide6.QtCore import QObject, Signal
 
 
 logger = get_logger()
 
 
-class Packer(QObject):
+class Signal:
+    """Lightweight Qt-style signal that doesn't require QObject.
+    Supports connect() and emit() with thread-safe dispatch."""
+    def __init__(self, *types):
+        self._types = types
+        self._callbacks = []
+
+    def connect(self, callback):
+        if callback not in self._callbacks:
+            self._callbacks.append(callback)
+
+    def emit(self, *args):
+        for callback in self._callbacks:
+            callback(*args)
+
+
+class Packer:
     log_signal = Signal(str)
     progress_signal = Signal(int, str)
     finished_signal = Signal(bool, dict, int)

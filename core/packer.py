@@ -37,41 +37,37 @@ class Packer(QObject):
         self.on_progress = None
 
     def _find_pyinstaller_command(self, source_dir=None, python_interpreter=None):
-        commands_by_interpreter = []
+        commands = []
+        cwd = source_dir if source_dir else os.path.dirname(sys.executable)
 
         if python_interpreter and os.path.exists(python_interpreter):
             python_dir = os.path.dirname(python_interpreter)
             scripts_dir = os.path.join(python_dir, "Scripts")
             pyinstaller_exe = os.path.join(scripts_dir, "pyinstaller.exe")
-            commands_by_interpreter = [
+            commands = [
                 [python_interpreter, "-m", "PyInstaller"],
+                [python_interpreter, "-m", "pyinstaller"],
                 [pyinstaller_exe],
             ]
             self._log(f"[pack] 使用指定的Python解释器: {python_interpreter}")
+            logger.info(f"[pack] 当前Python路径: {python_interpreter}")
         else:
             python_dir = os.path.dirname(sys.executable)
             scripts_dir = os.path.join(python_dir, "Scripts")
             pyinstaller_exe = os.path.join(scripts_dir, "pyinstaller.exe")
+            commands = [
+                [sys.executable, "-m", "PyInstaller"],
+                [sys.executable, "-m", "pyinstaller"],
+                ["pyinstaller"],
+                ["python", "-m", "PyInstaller"],
+                ["python3", "-m", "PyInstaller"],
+                [pyinstaller_exe],
+            ]
+            self._log(f"[pack] 使用默认Python解释器: {sys.executable}")
+            logger.info(f"[pack] 当前Python路径: {sys.executable}")
 
-        python_dir_default = os.path.dirname(sys.executable)
-        scripts_dir_default = os.path.join(python_dir_default, "Scripts")
-        pyinstaller_exe_default = os.path.join(scripts_dir_default, "pyinstaller.exe")
-
-        commands = list(commands_by_interpreter) + [
-            ["pyinstaller"],
-            [sys.executable, "-m", "PyInstaller"],
-            [sys.executable, "-m", "pyinstaller"],
-            ["python", "-m", "PyInstaller"],
-            ["python3", "-m", "PyInstaller"],
-            [pyinstaller_exe],
-            [pyinstaller_exe_default],
-        ]
-
-        cwd = source_dir if source_dir else os.path.dirname(sys.executable)
-
-        logger.info(f"[pack] 当前Python路径: {sys.executable}")
         logger.info(f"[pack] 当前Python版本: {sys.version}")
-        logger.info(f"[pack] 搜索PyInstaller目录: {scripts_dir if python_interpreter else scripts_dir_default}")
+        logger.info(f"[pack] 搜索PyInstaller目录: {scripts_dir}")
         logger.info(f"[pack] 工作目录: {cwd}")
 
         seen = set()
@@ -102,7 +98,6 @@ class Packer(QObject):
 
         logger.warning("[pack] 未找到可用的PyInstaller命令")
         logger.warning(f"[pack] 请确保已安装PyInstaller: pip install pyinstaller")
-        logger.warning(f"[pack] 或手动检查: {pyinstaller_exe_default}")
         return None
 
     def ensure_pyinstaller(self, source_dir=None, python_interpreter=None):
@@ -121,12 +116,12 @@ class Packer(QObject):
             )
             if result.returncode == 0:
                 self._log("[pack] PyInstaller安装成功")
-                cmd = self._find_pyinstaller_command(source_dir, None)
+                cmd = self._find_pyinstaller_command(source_dir, python_interpreter)
                 if cmd:
                     return True
                 else:
-                    self._log("[pack] [WARN] PyInstaller安装成功但命令不可用，尝试使用默认解释器")
-                    return True
+                    self._log("[pack] [WARN] PyInstaller安装成功但命令不可用")
+                    return False
             else:
                 self._log(f"[pack] PyInstaller安装失败: {result.stderr}")
                 return False
@@ -303,7 +298,93 @@ class Packer(QObject):
             for imp in imports:
                 if imp in qt_bindings:
                     return imp
+            project_imports = self._scan_project_imports(source_file)
+            for imp in project_imports:
+                if imp in qt_bindings:
+                    return imp
+            source_dir = os.path.dirname(source_file)
+            for root, dirs, files in os.walk(source_dir):
+                dirs[:] = [d for d in dirs if d not in ("__pycache__", ".git", ".svn", "venv", ".venv")]
+                for filename in files:
+                    if filename.endswith((".py", ".pyw")):
+                        filepath = os.path.join(root, filename)
+                        try:
+                            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                                content = f.read()
+                            for qt in qt_bindings:
+                                if qt in content:
+                                    self._log(f"[build_command] 在 {filepath} 中检测到 {qt}")
+                                    return qt
+                        except Exception:
+                            continue
         return None
+
+    def _get_all_installed_qt_bindings(self, python_interpreter=None):
+        import importlib.util
+        qt_bindings = []
+        test_bindings = ["PySide6", "PyQt6", "PySide2", "PyQt5"]
+        
+        for qt in test_bindings:
+            try:
+                spec = importlib.util.find_spec(qt)
+                if spec is not None:
+                    qt_bindings.append(qt)
+            except Exception:
+                pass
+        
+        if python_interpreter and os.path.exists(python_interpreter) and python_interpreter != sys.executable:
+            try:
+                result = run_hidden(
+                    [python_interpreter, "-c", "import sys; print('\\n'.join(sys.path))"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    venv_path = result.stdout.strip().split('\n')[0]
+                    for qt in test_bindings:
+                        qt_path = os.path.join(venv_path, qt)
+                        if os.path.exists(qt_path):
+                            qt_bindings.append(qt)
+            except Exception:
+                pass
+        
+        return list(set(qt_bindings))
+
+    def _detect_qfluentwidgets(self, source_file, hidden_imports):
+        for imp in hidden_imports:
+            if imp.startswith("qfluentwidgets"):
+                return True
+        if source_file and os.path.exists(source_file):
+            try:
+                with open(source_file, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+                if "qfluentwidgets" in content or "PySide6-Fluent-Widgets" in content:
+                    self._log(f"[build_command] 在 {source_file} 中检测到 qfluentwidgets")
+                    return True
+            except Exception:
+                pass
+            source_dir = os.path.dirname(source_file)
+            for root, dirs, files in os.walk(source_dir):
+                dirs[:] = [d for d in dirs if d not in ("__pycache__", ".git", ".svn", "venv", ".venv")]
+                for filename in files:
+                    if filename.endswith((".py", ".pyw")):
+                        filepath = os.path.join(root, filename)
+                        try:
+                            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                                content = f.read()
+                            if "qfluentwidgets" in content:
+                                self._log(f"[build_command] 在 {filepath} 中检测到 qfluentwidgets")
+                                return True
+                        except Exception:
+                            continue
+        try:
+            import qfluentwidgets
+            self._log("[build_command] 当前环境安装了 qfluentwidgets")
+            return True
+        except ImportError:
+            pass
+        return False
 
     def _scan_source_imports(self, source_file):
         if not source_file or not os.path.exists(source_file):
@@ -735,10 +816,6 @@ class Packer(QObject):
         # 添加优化参数提升打包速度
         cmd.append("--noconfirm")
         self._log("[build_command] 添加 --noconfirm 参数，跳过确认提示")
-        
-        # 添加 --no-build-isolation 跳过构建隔离环境，提升速度
-        cmd.append("--no-build-isolation")
-        self._log("[build_command] 添加 --no-build-isolation 参数，跳过构建隔离环境")
 
         windowed = config.get("windowed", False)
         
@@ -820,19 +897,46 @@ class Packer(QObject):
             self._log(f"[build_command] 检测到使用的Qt绑定: {used_qt}")
             self._log(f"[build_command] 安装的Qt绑定: {qt_bindings}")
             self._log(f"[build_command] 排除其他Qt绑定: {excluded_qt}")
-            
-            if f"--collect-all {used_qt}" not in " ".join(cmd):
-                cmd.extend(["--collect-all", used_qt])
-                self._log(f"[build_command] 添加 --collect-all {used_qt} 以确保Qt插件和资源被正确收集")
-            
-            # PySide6 需要 shiboken6 作为底层绑定
+
+            cmd.extend(["--collect-all", used_qt])
+            self._log(f"[build_command] 添加 --collect-all {used_qt}")
+
             if used_qt == "PySide6":
-                if "--collect-all shiboken6" not in " ".join(cmd):
-                    cmd.extend(["--collect-all", "shiboken6"])
-                    self._log("[build_command] 添加 --collect-all shiboken6 以确保PySide6底层绑定被正确收集")
+                cmd.extend(["--collect-all", "shiboken6"])
+                self._log("[build_command] 添加 --collect-all shiboken6")
         elif qt_bindings:
-            excludes.extend(qt_bindings)
-            self._log(f"[build_command] 未检测到使用Qt绑定，排除所有安装的Qt绑定: {qt_bindings}")
+            # 未检测到直接使用，但为已安装的Qt绑定添加收集参数（防止间接导入缺失）
+            self._log(f"[build_command] 未检测到直接使用的Qt绑定，为已安装的Qt绑定添加收集参数")
+            self._log(f"[build_command] 安装的Qt绑定: {qt_bindings}")
+            for qt in qt_bindings:
+                cmd.extend(["--collect-all", qt])
+                self._log(f"[build_command] 添加 --collect-all {qt}")
+            # PySide6 需要 shiboken6
+            if "PySide6" in qt_bindings:
+                cmd.extend(["--collect-all", "shiboken6"])
+                self._log("[build_command] 添加 --collect-all shiboken6")
+
+        if "PySide6" in qt_bindings or used_qt == "PySide6":
+            cmd.extend(["--hidden-import", "PySide6"])
+            cmd.extend(["--hidden-import", "PySide6.QtCore"])
+            cmd.extend(["--hidden-import", "PySide6.QtGui"])
+            cmd.extend(["--hidden-import", "PySide6.QtWidgets"])
+            cmd.extend(["--hidden-import", "PySide6.QtSvgWidgets"])
+            cmd.extend(["--hidden-import", "PySide6.QtNetwork"])
+            cmd.extend(["--hidden-import", "PySide6.QtPrintSupport"])
+            cmd.extend(["--hidden-import", "PySide6.QtXml"])
+            cmd.extend(["--hidden-import", "shiboken6"])
+            self._log("[build_command] 添加 PySide6 核心模块的 hidden-import")
+
+        qfluentwidgets_detected = self._detect_qfluentwidgets(source_file, hidden_imports)
+        if qfluentwidgets_detected:
+            cmd.extend(["--collect-all", "qfluentwidgets"])
+            self._log("[build_command] 添加 --collect-all qfluentwidgets")
+            if "PySide6" in qt_bindings or used_qt == "PySide6":
+                cmd.extend(["--collect-all", "PySide6.QtSvgWidgets"])
+                cmd.extend(["--collect-all", "PySide6.QtNetwork"])
+                self._log("[build_command] 添加 --collect-all PySide6.QtSvgWidgets")
+                self._log("[build_command] 添加 --collect-all PySide6.QtNetwork")
 
         for exc in excludes:
             cmd.extend(["--exclude-module", exc])
@@ -876,13 +980,29 @@ class Packer(QObject):
         self._log(f"[build_command] 命令构建完成，参数数量: {len(cmd)}")
         return cmd, work_dir
 
-    def run_pyinstaller(self, cmd, stop_event=None):
+    def run_pyinstaller(self, cmd, stop_event=None, config=None):
         self._log("[run_pyinstaller] 开始执行PyInstaller")
         self._log(f"[run_pyinstaller] 完整命令: {' '.join(cmd)}")
 
         source_file = cmd[-1] if cmd else ""
         cwd = os.path.dirname(source_file) if source_file else os.path.dirname(sys.executable)
         self._log(f"[run_pyinstaller] 工作目录: {cwd}")
+
+        env = os.environ.copy()
+        if config:
+            python_interpreter = config.get("python_interpreter")
+            if python_interpreter and os.path.exists(python_interpreter):
+                python_dir = os.path.dirname(python_interpreter)
+                scripts_dir = os.path.join(python_dir, "Scripts")
+                env["PATH"] = scripts_dir + os.pathsep + python_dir + os.pathsep + env.get("PATH", "")
+                self._log(f"[run_pyinstaller] 设置PATH环境变量: {python_dir}, {scripts_dir}")
+
+            qt_bindings = self._detect_qt_bindings(python_interpreter)
+            used_qt = self._detect_used_qt_binding(source_file, config.get("hidden_imports", []))
+            
+            if used_qt == "PySide6" or "PySide6" in qt_bindings:
+                env["QT_API"] = "pyside6"
+                self._log("[run_pyinstaller] 设置QT_API=pyside6环境变量")
 
         process = None
         try:
@@ -892,7 +1012,8 @@ class Packer(QObject):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 bufsize=1,
-                cwd=cwd
+                cwd=cwd,
+                env=env
             )
 
             self._log("[run_pyinstaller] 子进程创建成功，开始读取输出...")
@@ -1079,7 +1200,7 @@ class Packer(QObject):
 
             self._progress(20, "执行PyInstaller")
             self._log("[pack] 步骤4/5: 执行PyInstaller打包")
-            if not self.run_pyinstaller(cmd, stop_event):
+            if not self.run_pyinstaller(cmd, stop_event, config):
                 self._log("[pack] [ERROR] PyInstaller执行失败")
                 if os.path.exists(work_dir):
                     self.cache_cleaner.delete_dir(work_dir)

@@ -20,14 +20,14 @@ def run_hidden(args, capture_output=False, text=True, timeout=None, use_hidden=T
     return subprocess.run(args, text=text, timeout=timeout, cwd=cwd, **kwargs)
 
 
-def popen_hidden(args, stdout=None, stderr=None, text=True, cwd=None, **kwargs):
+def popen_hidden(args, stdout=None, stderr=None, text=True, cwd=None, env=None, **kwargs):
     kwargs['creationflags'] = get_hidden_process_creation_flags()
     kwargs['shell'] = False
     if stdout is None:
         stdout = subprocess.PIPE
     if stderr is None:
         stderr = subprocess.STDOUT
-    return subprocess.Popen(args, stdout=stdout, stderr=stderr, text=text, cwd=cwd, **kwargs)
+    return subprocess.Popen(args, stdout=stdout, stderr=stderr, text=text, cwd=cwd, env=env, **kwargs)
 
 
 def get_file_size(file_path):
