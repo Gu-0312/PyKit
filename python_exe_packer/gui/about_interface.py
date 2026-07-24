@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
 from qfluentwidgets import (
     BodyLabel, TitleLabel, CaptionLabel, ComboBox
 )
-from _metadata import APP_NAME, APP_VERSION, APP_AUTHOR, APP_COPYRIGHT
+from _metadata import APP_NAME, APP_VERSION, APP_AUTHOR, APP_COPYRIGHT, APP_HOMEPAGE
 from utils.i18n import tr, set_language
 from utils.config_manager import ConfigManager
 from app.application import get_lang_manager
@@ -94,12 +94,10 @@ class AboutInterface(QWidget):
         self.copyright_label.setText(APP_COPYRIGHT)
         self.desc_label.setText(
             "基于 PyInstaller 的 Python 一键打包工具，提供直观的图形化界面，让打包变得简单高效。"
-            "\n\n"
-            "An intuitive PyInstaller GUI wrapper that simplifies Python app packaging into one click."
         )
-        self.github_label.setText('<a href="https://github.com/Gu-0312" style="color: #4a9eff; text-decoration: none;">GitHub: https://github.com/Gu-0312</a>')
+        self.github_label.setText(f'<a href="{APP_HOMEPAGE}" style="color: #4a9eff; text-decoration: none;">GitHub: {APP_HOMEPAGE}</a>')
         self.disclaimer_label.setText(tr("disclaimer_text"))
-        self.lang_label.setText(f"{tr('language')} / Language:")
+        self.lang_label.setText("语言 / Language:")
 
     def _on_lang_changed(self, index):
         lang_key = self.lang_combo.itemData(index)
