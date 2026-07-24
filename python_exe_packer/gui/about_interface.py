@@ -1,8 +1,7 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
 from qfluentwidgets import (
-    BodyLabel, TitleLabel, CaptionLabel, ComboBox,
-    MessageBox
+    BodyLabel, TitleLabel, CaptionLabel, ComboBox
 )
 from _metadata import APP_NAME, APP_VERSION, APP_AUTHOR, APP_COPYRIGHT
 from utils.i18n import tr, set_language
@@ -53,9 +52,10 @@ class AboutInterface(QWidget):
 
         self.main_layout.addSpacing(10)
 
-        # GitHub 地址
-        self.github_label = BodyLabel()
+        # GitHub 地址（超链接）
+        self.github_label = QLabel()
         self.github_label.setAlignment(Qt.AlignCenter)
+        self.github_label.setOpenExternalLinks(True)
         self.main_layout.addWidget(self.github_label)
 
         self.main_layout.addSpacing(20)
@@ -97,9 +97,9 @@ class AboutInterface(QWidget):
             "\n\n"
             "An intuitive PyInstaller GUI wrapper that simplifies Python app packaging into one click."
         )
-        self.github_label.setText('GitHub: https://github.com/Gu-0312')
+        self.github_label.setText('<a href="https://github.com/Gu-0312" style="color: #4a9eff; text-decoration: none;">GitHub: https://github.com/Gu-0312</a>')
         self.disclaimer_label.setText(tr("disclaimer_text"))
-        self.lang_label.setText(f"{tr('language')}:")
+        self.lang_label.setText(f"{tr('language')} / Language:")
 
     def _on_lang_changed(self, index):
         lang_key = self.lang_combo.itemData(index)
