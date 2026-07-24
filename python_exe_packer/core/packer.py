@@ -1186,12 +1186,14 @@ class Packer:
             
             # PySide6 需要 shiboken6 作为底层绑定
             if used_qt == "PySide6":
-                if "--hidden-import PySide6" not in " ".join(cmd):
-                    hidden_qt = ["PySide6", "PySide6.QtCore", "PySide6.QtWidgets", "PySide6.QtGui", "shiboken6"]
-                    for hq in hidden_qt:
-                        cmd.extend(["--hidden-import", hq])
-                    self._log(f"[build_command] 添加显式隐藏导入: {hidden_qt}")
-                if "--collect-all shiboken6" not in " ".join(cmd):
+                existing_hidden = set(cmd[i+1] for i in range(len(cmd)-1) if cmd[i] == "--hidden-import")
+                required_qt = ["PySide6", "PySide6.QtCore", "PySide6.QtWidgets", "PySide6.QtGui", "shiboken6"]
+                missing = [m for m in required_qt if m not in existing_hidden]
+                if missing:
+                    for m in missing:
+                        cmd.extend(["--hidden-import", m])
+                    self._log(f"[build_command] 补充PySide6隐藏导入: {missing}")
+                if "--collect-all shiboken6" not in cmd:
                     cmd.extend(["--collect-all", "shiboken6"])
                     self._log("[build_command] 添加 --collect-all shiboken6 以确保PySide6底层绑定被正确收集")
         elif qt_bindings:
