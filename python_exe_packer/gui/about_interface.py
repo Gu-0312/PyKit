@@ -43,41 +43,26 @@ class AboutInterface(QWidget):
         self.copyright_label.setAlignment(Qt.AlignCenter)
         self.main_layout.addWidget(self.copyright_label)
 
-        self.main_layout.addSpacing(20)
+        self.main_layout.addSpacing(10)
 
-        # 功能介绍标题
-        self.features_title = TitleLabel()
-        self.features_title.setAlignment(Qt.AlignCenter)
-        self.main_layout.addWidget(self.features_title)
+        # 功能介绍
+        self.desc_label = BodyLabel()
+        self.desc_label.setAlignment(Qt.AlignCenter)
+        self.desc_label.setWordWrap(True)
+        self.main_layout.addWidget(self.desc_label)
 
-        # 功能介绍列表
-        self.features_list = []
-        features = [
-            "一键打包：支持单文件和多文件两种打包模式",
-            "自动检测：智能检测项目依赖和虚拟环境",
-            "隐藏控制台：支持无控制台模式运行",
-            "图标设置：自定义程序图标",
-            "UPX压缩：支持UPX压缩减小文件体积",
-            "安装包生成：支持Inno Setup生成安装程序",
-            "配置记忆：自动保存和加载打包配置",
-            "图标制作：内置PNG转ICO图标工具",
-        ]
-        for feature in features:
-            label = BodyLabel(feature)
-            label.setAlignment(Qt.AlignLeft)
-            self.main_layout.addWidget(label)
-            self.features_list.append(label)
+        self.main_layout.addSpacing(10)
+
+        # GitHub 地址
+        self.github_label = BodyLabel()
+        self.github_label.setAlignment(Qt.AlignCenter)
+        self.main_layout.addWidget(self.github_label)
 
         self.main_layout.addSpacing(20)
-
-        # 免责声明标题
-        self.disclaimer_title = TitleLabel()
-        self.disclaimer_title.setAlignment(Qt.AlignCenter)
-        self.main_layout.addWidget(self.disclaimer_title)
 
         # 免责声明内容
         self.disclaimer_label = BodyLabel()
-        self.disclaimer_label.setAlignment(Qt.AlignLeft)
+        self.disclaimer_label.setAlignment(Qt.AlignCenter)
         self.disclaimer_label.setWordWrap(True)
         self.main_layout.addWidget(self.disclaimer_label)
 
@@ -107,8 +92,12 @@ class AboutInterface(QWidget):
         self.ver.setText(f"{tr('app_version')} {APP_VERSION}")
         self.author.setText(f"{tr('author')}: {APP_AUTHOR}")
         self.copyright_label.setText(APP_COPYRIGHT)
-        self.features_title.setText(tr("features_title"))
-        self.disclaimer_title.setText(tr("disclaimer_title"))
+        self.desc_label.setText(
+            "基于 PyInstaller 的 Python 一键打包工具，提供直观的图形化界面，让打包变得简单高效。"
+            "\n\n"
+            "An intuitive PyInstaller GUI wrapper that simplifies Python app packaging into one click."
+        )
+        self.github_label.setText('GitHub: https://github.com/Gu-0312')
         self.disclaimer_label.setText(tr("disclaimer_text"))
         self.lang_label.setText(f"{tr('language')}:")
 
