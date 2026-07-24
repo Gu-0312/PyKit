@@ -1,4 +1,5 @@
 import os
+import sys
 import threading
 import time
 from PySide6.QtCore import Qt, QSize
@@ -114,7 +115,7 @@ class MainWindow(MSFluentWindow):
 
         self.pack_interface.start_pack_signal.connect(self._on_start_pack)
         self.pack_interface.stop_pack_signal.connect(self._on_stop_pack)
-        self.packer.finished_signal.connect(self._on_pack_finished)
+        self.pack_interface.pack_finished_signal.connect(self._on_pack_finished)
         self.pack_interface.clean_build_signal.connect(self._on_clean_build)
         self.build_cleaner.set_log_callback(
             lambda msg: self.pack_interface.log_widget.add_log(msg)
@@ -144,17 +145,39 @@ class MainWindow(MSFluentWindow):
                 center.y() - self.height() // 2
             )
 
-        icon_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "icon.ico"
-        )
-        if os.path.exists(icon_path):
+        icon_path = self._find_icon()
+        if icon_path:
             ico = QIcon(icon_path)
             self.setWindowIcon(ico)
             self._tray = QSystemTrayIcon(ico, self)
             self._tray.show()
         else:
             self._tray = None
+
+    def _find_icon(self):
+        """查找图标文件：优先 PyInstaller 打包目录，其次项目源码目录"""
+        # PyInstaller 打包后，图标作为数据文件在临时目录中
+        if getattr(sys, 'frozen', False):
+            meipass = getattr(sys, '_MEIPASS', '')
+            print(f"[ICON] frozen mode, _MEIPASS={meipass}")
+            if meipass:
+                bundled = os.path.join(meipass, "icon.ico")
+                print(f"[ICON] checking bundled: {bundled}, exists={os.path.exists(bundled)}")
+                # 列出 _MEIPASS 下所有 ico 文件帮助排查
+                for f in os.listdir(meipass):
+                    if f.endswith('.ico'):
+                        print(f"[ICON] found ico in bundle: {f}")
+                if os.path.exists(bundled):
+                    return bundled
+        # 开发环境：项目根目录
+        dev_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "icon.ico"
+        )
+        print(f"[ICON] checking dev: {dev_path}, exists={os.path.exists(dev_path)}")
+        if os.path.exists(dev_path):
+            return dev_path
+        return None
 
     def _check_environment(self):
         checker = EnvChecker()

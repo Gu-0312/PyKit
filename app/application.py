@@ -39,12 +39,25 @@ class Application(QApplication):
         setTheme(Theme.AUTO)
         
         # 设置应用程序图标
-        icon_path = os.path.join(
+        icon_path = self._find_icon()
+        if icon_path:
+            self.setWindowIcon(QIcon(icon_path))
+
+    def _find_icon(self):
+        """查找图标文件：优先 PyInstaller 打包目录，其次项目源码目录"""
+        if getattr(sys, 'frozen', False):
+            meipass = getattr(sys, '_MEIPASS', '')
+            if meipass:
+                bundled = os.path.join(meipass, "icon.ico")
+                if os.path.exists(bundled):
+                    return bundled
+        dev_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "icon.ico"
         )
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
+        if os.path.exists(dev_path):
+            return dev_path
+        return None
 
     @staticmethod
     def ensure_single_instance():

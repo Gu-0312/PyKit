@@ -10,13 +10,25 @@ from core.cache_cleaner import CacheCleaner
 from core.inno_setup import InnoSetup
 from core.upx_compressor import UPXCompressor
 from _version import get_version
-from PySide6.QtCore import QObject, Signal
-
-
 logger = get_logger()
 
 
-class Packer(QObject):
+class Signal:
+    """Lightweight Qt-style signal that doesn't require QObject."""
+    def __init__(self, *types):
+        self._types = types
+        self._callbacks = []
+
+    def connect(self, callback):
+        if callback not in self._callbacks:
+            self._callbacks.append(callback)
+
+    def emit(self, *args):
+        for callback in self._callbacks:
+            callback(*args)
+
+
+class Packer:
     log_signal = Signal(str)
     progress_signal = Signal(int, str)
     finished_signal = Signal(bool, dict, int)
@@ -28,7 +40,7 @@ class Packer(QObject):
     ]
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__()
         self.dependency_analyzer = DependencyAnalyzer()
         self.cache_cleaner = CacheCleaner()
         self.inno_setup = InnoSetup()
@@ -844,6 +856,9 @@ class Packer(QObject):
         if icon_path:
             cmd.extend(["-i", icon_path])
             self._log(f"[build_command] 图标文件: {icon_path}")
+            icon_basename = os.path.basename(icon_path)
+            cmd.extend(["--add-data", f"{icon_path}{os.pathsep}."])
+            self._log(f"[build_command] 图标已添加为数据文件 {icon_basename}（运行时使用）")
 
         output_dir = config.get("output_dir", "")
         if output_dir:
@@ -937,6 +952,20 @@ class Packer(QObject):
                 cmd.extend(["--collect-all", "PySide6.QtNetwork"])
                 self._log("[build_command] 添加 --collect-all PySide6.QtSvgWidgets")
                 self._log("[build_command] 添加 --collect-all PySide6.QtNetwork")
+
+        # 自动注入任务栏图标代码到源文件
+        if icon_path and (used_qt or qfluentwidgets_detected):
+            injected = self._inject_icon_code(source_file, icon_basename)
+            if injected and injected != source_file:
+                source_file = injected
+                config["source_file"] = injected
+                self._log("[build_command] 已自动注入任务栏图标代码到源文件")
+            else:
+                self._log("[build_command] [WARN] 无法自动注入任务栏图标代码")
+        elif icon_path and not (used_qt or qfluentwidgets_detected):
+            self._log("[build_command] [提示] 未检测到Qt绑定，跳过自动注入任务栏图标代码")
+            self._log(f"[build_command] [提示] 如需任务栏图标，请在源码中添加:")
+            self._log(f"[build_command] [提示]   self.setWindowIcon(QIcon('{icon_basename}'))")
 
         for exc in excludes:
             cmd.extend(["--exclude-module", exc])
@@ -1278,6 +1307,67 @@ class Packer(QObject):
             self._log(f"[pack] [ERROR] 堆栈信息:\n{traceback.format_exc()}")
             self._log(f"[pack] [ERROR] 错误诊断: {ErrorParser.format_error_report(str(e))}")
             return False
+
+    def _inject_icon_code(self, source_file, icon_filename):
+        try:
+            with open(source_file, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+
+            _u = '__icn_'
+            template = '''
+import sys as {u}sys, os as {u}os
+{u}icon_file = "{icon_file}"
+def {u}set_icon():
+    try:
+        for {u}mod in ['PySide6', 'PyQt6', 'PySide2', 'PyQt5']:
+            try:
+                {u}wid = __import__(f'{{{u}mod}}.QtWidgets', fromlist=['QApplication'])
+                {u}app = {u}wid.QApplication.instance()
+                if {u}app is not None:
+                    {u}gui = __import__(f'{{{u}mod}}.QtGui', fromlist=['QIcon'])
+                    p = {u}os.path.join({u}sys._MEIPASS, {u}icon_file) if getattr({u}sys, 'frozen', False) else {u}icon_file
+                    if {u}os.path.exists(p):
+                        {u}app.setWindowIcon({u}gui.QIcon(p))
+                break
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+for {u}mod in ['PySide6', 'PyQt6', 'PySide2', 'PyQt5']:
+    try:
+        {u}core = __import__(f'{{{u}mod}}.QtCore', fromlist=['QTimer'])
+        {u}core.QTimer.singleShot(0, {u}set_icon)
+        break
+    except Exception:
+        continue
+'''
+            patch_code = template.format(u=_u, icon_file=icon_filename)
+
+            lines = content.splitlines(True)
+            inject_at = 0
+            for i, line in enumerate(lines):
+                stripped = line.lstrip()
+                if i == 0 and stripped.startswith('#!'):
+                    inject_at = i + 1
+                elif stripped.startswith('# -*-') and inject_at <= i:
+                    inject_at = i + 1
+                else:
+                    break
+
+            lines.insert(inject_at, patch_code)
+
+            import uuid
+            temp_name = f"__icon_injected_{uuid.uuid4().hex[:8]}_{os.path.basename(source_file)}"
+            temp_path = os.path.join(os.path.dirname(source_file), temp_name)
+
+            with open(temp_path, 'w', encoding='utf-8') as f:
+                f.writelines(lines)
+
+            return temp_path
+        except Exception as e:
+            self._log(f"[icon_inject] 注入图标代码失败: {e}")
+            return source_file
 
     def validate_config(self, config):
         errors = []

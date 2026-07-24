@@ -1,7 +1,7 @@
 import os
 import sys
 import subprocess
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QObject
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFileDialog, QInputDialog,
     QButtonGroup
@@ -21,9 +21,16 @@ from utils.i18n import tr
 from _version import get_version
 
 
+class SignalRelay(QObject):
+    log = Signal(str)
+    progress = Signal(int, str)
+    finished = Signal(bool, dict, int)
+
+
 class PackInterface(QWidget):
     start_pack_signal = Signal(dict)
     stop_pack_signal = Signal()
+    pack_finished_signal = Signal(bool, dict, int)
     clean_build_signal = Signal(str)
 
     PRESETS = {
@@ -72,6 +79,8 @@ class PackInterface(QWidget):
         self.packer = packer
         self.config_manager = config_manager
         self.is_packing = False
+        self._relay = SignalRelay()
+        self._setup_relay()
         self._build_ui()
         self._connect_signals()
         # 加载保存的配置
@@ -126,8 +135,8 @@ class PackInterface(QWidget):
 
         mode_group = QButtonGroup(self)
         self.single_file_rb = RadioButton(tr("single_mode"))
-        self.single_file_rb.setChecked(True)
         self.multi_file_rb = RadioButton(tr("multi_mode"))
+        self.multi_file_rb.setChecked(True)
         mode_group.addButton(self.single_file_rb)
         mode_group.addButton(self.multi_file_rb)
         mode_row = QHBoxLayout()
@@ -458,10 +467,16 @@ class PackInterface(QWidget):
         # 预览按钮
         self.preview_btn.setEnabled(enabled)
 
+    def _setup_relay(self):
+        self.packer.log_signal.connect(self._relay.log.emit)
+        self.packer.progress_signal.connect(self._relay.progress.emit)
+        self.packer.finished_signal.connect(self._relay.finished.emit)
+
     def _connect_signals(self):
-        self.packer.log_signal.connect(self.log_widget.add_log)
-        self.packer.progress_signal.connect(self._on_progress)
-        self.packer.finished_signal.connect(self._on_pack_finished)
+        self._relay.log.connect(self.log_widget.add_log)
+        self._relay.progress.connect(self._on_progress)
+        self._relay.finished.connect(self._on_pack_finished)
+        self._relay.finished.connect(self.pack_finished_signal.emit)
 
     def _on_progress(self, percent, message):
         self.progress_bar.setValue(percent)
