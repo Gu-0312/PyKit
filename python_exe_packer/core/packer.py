@@ -1196,10 +1196,20 @@ class Packer(QObject):
                 src, dst = data
                 cmd.extend(["--add-data", f"{src}{os.pathsep}{dst}"])
                 self._log(f"[build_command] 添加数据文件: {src} -> {dst}")
+
+        # 自动将 upx.exe 打进 EXE（如果源码目录有 upx.exe）
+        upx_src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "upx.exe")
+        if os.path.exists(upx_src):
+            add_data = f"{upx_src}{os.pathsep}."
+            if add_data not in cmd:
+                cmd.extend(["--add-data", add_data])
+                self._log(f"[build_command] 自动打包 UPX: {upx_src}")
+                # 同时记录 UPX 路径，供后续 UPX 处理使用
+                config["_bundled_upx"] = upx_src
         
         # UPX处理
         if config.get("enable_upx", False):
-            upx_path = config.get("upx_path", "") or getattr(self, "_upx_path", "")
+            upx_path = config.get("upx_path", "") or config.get("_bundled_upx", "") or getattr(self, "_upx_path", "")
             if upx_path and os.path.exists(upx_path):
                 cmd.extend(["--upx-dir", upx_path])
                 self._log(f"[build_command] 使用UPX压缩: {upx_path}")

@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 from utils.log_utils import get_logger
 from utils.file_utils import run_hidden
@@ -19,6 +20,18 @@ class UPXCompressor:
             logger.info("[UPX] UPX不可用，压缩功能已禁用")
 
     def _find_upx(self):
+        # 先在打包后 EXE 的解压目录中找
+        if getattr(sys, 'frozen', False):
+            base = sys._MEIPASS
+            meipass_exe = os.path.join(base, "upx.exe")
+            if os.path.exists(meipass_exe):
+                return meipass_exe
+            # 也看看 EXE 同级目录
+            exe_dir = os.path.dirname(sys.executable)
+            side_exe = os.path.join(exe_dir, "upx.exe")
+            if os.path.exists(side_exe):
+                return side_exe
+
         paths = [
             os.path.join(os.environ.get("PROGRAMFILES", "C:\\Program Files"), "UPX"),
             os.path.join(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)"), "UPX"),
