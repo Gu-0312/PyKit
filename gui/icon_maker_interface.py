@@ -22,6 +22,8 @@ class IconMakerInterface(QWidget):
         super().__init__()
         self.init_ui()
         self._connect_signals()
+        from qfluentwidgets import qconfig
+        qconfig.themeChanged.connect(self._update_preview_style)
 
     def init_ui(self):
         self.setObjectName("iconMakerInterface")
@@ -63,7 +65,7 @@ class IconMakerInterface(QWidget):
         preview_layout.addWidget(preview_title)
         
         self.preview_label = QLabel()
-        self.preview_label.setStyleSheet("background-color: #f0f0f0; border-radius: 8px;")
+        self._update_preview_style()
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setMinimumHeight(200)
         preview_layout.addWidget(self.preview_label)
@@ -132,6 +134,16 @@ class IconMakerInterface(QWidget):
         tips_label.setStyleSheet("font-size: 12px; color: #666;")
         tips_label.setWordWrap(True)
         layout.addWidget(tips_label)
+
+    def _update_preview_style(self):
+        from qfluentwidgets import Theme, qconfig
+
+        dark_mode = getattr(qconfig, 'theme', None) == Theme.DARK
+
+        if dark_mode:
+            self.preview_label.setStyleSheet("background-color: #2d2d2d; border-radius: 8px;")
+        else:
+            self.preview_label.setStyleSheet("background-color: #f0f0f0; border-radius: 8px;")
 
     def _connect_signals(self):
         self.source_btn.clicked.connect(self._select_source)

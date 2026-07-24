@@ -85,6 +85,8 @@ class MainWindow(MSFluentWindow):
         self.history_interface._update_table_style()
         # 更新日志区域的样式
         self.pack_interface.log_widget._update_style()
+        # 更新图标制作界面的预览样式
+        self.icon_maker_interface._update_preview_style()
 
     def _create_sub_interfaces(self):
         self.pack_interface = PackInterface(self.packer, self.config_manager)
