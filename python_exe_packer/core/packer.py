@@ -70,7 +70,7 @@ class Packer:
     ]
 
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__()
         self.dependency_analyzer = DependencyAnalyzer()
         self.cache_cleaner = CacheCleaner()
         self.inno_setup = InnoSetup()
@@ -1186,6 +1186,11 @@ class Packer:
             
             # PySide6 需要 shiboken6 作为底层绑定
             if used_qt == "PySide6":
+                if "--hidden-import PySide6" not in " ".join(cmd):
+                    hidden_qt = ["PySide6", "PySide6.QtCore", "PySide6.QtWidgets", "PySide6.QtGui", "shiboken6"]
+                    for hq in hidden_qt:
+                        cmd.extend(["--hidden-import", hq])
+                    self._log(f"[build_command] 添加显式隐藏导入: {hidden_qt}")
                 if "--collect-all shiboken6" not in " ".join(cmd):
                     cmd.extend(["--collect-all", "shiboken6"])
                     self._log("[build_command] 添加 --collect-all shiboken6 以确保PySide6底层绑定被正确收集")
