@@ -141,6 +141,17 @@ class Packer(QObject):
             except Exception as e:
                 logger.info(f"[pack] 命令执行异常: {' '.join(cmd)}, 错误: {type(e).__name__}: {str(e)}")
 
+        # 尝试通过 python 命令（非 sys.executable）找 PyInstaller
+        for py_cmd in [["python"], ["python3"], ["py"]]:
+            try:
+                full_cmd = py_cmd + ["-m", "PyInstaller", "--version"]
+                result = subprocess.run(full_cmd, capture_output=True, text=True, timeout=10, shell=False)
+                if result.returncode == 0:
+                    logger.info(f"[pack] 通过 {py_cmd[0]} -m PyInstaller 找到")
+                    return py_cmd + ["-m", "PyInstaller"]
+            except Exception:
+                continue
+
         logger.warning("[pack] 未找到可用的PyInstaller命令")
         logger.warning(f"[pack] 请确保已安装PyInstaller: pip install pyinstaller")
         logger.warning(f"[pack] 或手动检查: {pyinstaller_exe_default}")
@@ -156,24 +167,44 @@ class Packer(QObject):
         self._log("[pack] 检测到PyInstaller未安装，正在尝试自动安装...")
         try:
             install_cwd = source_dir if source_dir else os.path.dirname(sys.executable)
-            interpreter = python_interpreter if python_interpreter else sys.executable
-            result = run_hidden(
-                [interpreter, "-m", "pip", "install", "pyinstaller"],
-                capture_output=True,
-                timeout=180,
-                cwd=install_cwd
-            )
-            if result.returncode == 0:
-                self._log("[pack] PyInstaller安装成功")
-                cmd = self._find_pyinstaller_command(source_dir, None)
-                if cmd:
-                    return True
-                else:
-                    self._log("[pack] [WARN] PyInstaller安装成功但命令不可用，尝试使用默认解释器")
-                    return True
+
+            # 如果是打包后的EXE，sys.executable 不是 Python 解释器，改用 python 命令
+            if getattr(sys, 'frozen', False) and not python_interpreter:
+                install_cmds = [
+                    ["python", "-m", "pip", "install", "pyinstaller"],
+                    ["python3", "-m", "pip", "install", "pyinstaller"],
+                    ["py", "-m", "pip", "install", "pyinstaller"],
+                ]
             else:
-                self._log(f"[pack] PyInstaller安装失败: {result.stderr}")
+                interpreter = python_interpreter if python_interpreter else sys.executable
+                install_cmds = [[interpreter, "-m", "pip", "install", "pyinstaller"]]
+
+            installed = False
+            for install_cmd in install_cmds:
+                try:
+                    result = run_hidden(
+                        install_cmd,
+                        capture_output=True,
+                        timeout=180,
+                        cwd=install_cwd
+                    )
+                    if result.returncode == 0:
+                        installed = True
+                        break
+                except Exception:
+                    continue
+
+            if not installed:
+                self._log("[pack] PyInstaller自动安装失败，请手动安装：pip install pyinstaller")
                 return False
+
+            self._log("[pack] PyInstaller安装成功")
+            cmd = self._find_pyinstaller_command(source_dir, None)
+            if cmd:
+                return True
+            else:
+                self._log("[pack] [WARN] PyInstaller安装成功但命令不可用，尝试使用默认解释器")
+                return True
         except Exception as e:
             self._log(f"[pack] PyInstaller安装异常: {str(e)}")
             return False
